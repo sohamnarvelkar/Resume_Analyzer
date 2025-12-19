@@ -1,0 +1,5 @@
+{
+  "name": "Enterprise AI Resume Screener",
+  "description": "A powerful ATS-optimized ranking engine that evaluates candidate resumes against job descriptions using enterprise-grade AI logic.",
+  "requestFramePermissions": []
+}
