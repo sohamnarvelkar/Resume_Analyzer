@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Briefcase, 
   Users, 
@@ -10,22 +10,49 @@ import {
   Loader2, 
   CheckCircle2, 
   AlertCircle,
-  BarChart3,
-  Search
+  Search,
+  History as HistoryIcon,
+  LogOut,
+  ChevronLeft,
+  Settings,
+  Bell
 } from 'lucide-react';
-import { RoleType, ResumeInput, ScreenerOutput } from './types';
+import { RoleType, ResumeInput, ScreenerOutput, User, HistoryItem } from './types';
 import { screenResumes } from './geminiService';
 import Dashboard from './components/Dashboard';
+import Auth from './components/Auth';
+import History from './components/History';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(() => {
+    const savedUser = localStorage.getItem('resu_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    const savedHistory = localStorage.getItem('resu_history');
+    return savedHistory ? JSON.parse(savedHistory) : [];
+  });
+
+  const [view, setView] = useState<'screen' | 'result' | 'history'>('screen');
   const [roleType, setRoleType] = useState<RoleType>(RoleType.Tech);
   const [jobDescription, setJobDescription] = useState('');
-  const [resumes, setResumes] = useState<ResumeInput[]>([
-    { id: '1', text: '' }
-  ]);
+  const [resumes, setResumes] = useState<ResumeInput[]>([{ id: '1', text: '' }]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<ScreenerOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('resu_history', JSON.stringify(history));
+  }, [history]);
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('resu_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('resu_user');
+    }
+  }, [user]);
 
   const handleAddResume = () => {
     setResumes([...resumes, { id: Date.now().toString(), text: '' }]);
@@ -54,7 +81,6 @@ const App: React.FC = () => {
 
     setIsProcessing(true);
     setError(null);
-    setResult(null);
 
     try {
       const data = await screenResumes(
@@ -62,7 +88,18 @@ const App: React.FC = () => {
         jobDescription, 
         filledResumes.map(r => r.text)
       );
+      
+      const newHistoryItem: HistoryItem = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        role: roleType,
+        candidateCount: filledResumes.length,
+        data: data
+      };
+      
+      setHistory([newHistoryItem, ...history]);
       setResult(data);
+      setView('result');
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred.');
     } finally {
@@ -70,43 +107,129 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSelectHistoryItem = (item: HistoryItem) => {
+    setResult(item.data);
+    setView('result');
+  };
+
+  const handleDeleteHistoryItem = (id: string) => {
+    setHistory(history.filter(h => h.id !== id));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setView('screen');
+  };
+
+  if (!user) {
+    return <Auth onLogin={setUser} />;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
       {/* Navbar */}
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Search className="w-6 h-6 text-white" />
+            <div className="flex items-center space-x-8">
+              <div 
+                className="flex items-center space-x-2 cursor-pointer" 
+                onClick={() => setView('screen')}
+              >
+                <div className="bg-blue-600 p-2 rounded-lg">
+                  <Search className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xl font-bold tracking-tight text-slate-800 hidden sm:block">
+                  ResuMatch <span className="text-blue-600">Pro</span>
+                </span>
               </div>
-              <span className="text-xl font-bold tracking-tight text-slate-800">
-                ResuMatch <span className="text-blue-600">Pro</span>
-              </span>
+
+              <div className="hidden md:flex items-center space-x-1">
+                <button 
+                  onClick={() => setView('screen')}
+                  className={`px-4 py-2 text-sm font-bold rounded-xl transition-all ${view === 'screen' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                  Screening
+                </button>
+                <button 
+                  onClick={() => setView('history')}
+                  className={`px-4 py-2 text-sm font-bold rounded-xl flex items-center space-x-2 transition-all ${view === 'history' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                  <HistoryIcon className="w-4 h-4" />
+                  <span>History</span>
+                </button>
+              </div>
             </div>
+
             <div className="flex items-center space-x-4">
-              <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full border border-blue-100 uppercase tracking-wider">
-                Enterprise AI Engine
-              </span>
+              <div className="hidden sm:flex flex-col items-end">
+                <span className="text-sm font-bold text-slate-800">{user.name}</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Enterprise Plan</span>
+              </div>
+              
+              <div className="relative group">
+                <img 
+                  src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`} 
+                  alt="Avatar" 
+                  className="w-10 h-10 rounded-full border-2 border-white ring-2 ring-blue-50 cursor-pointer"
+                />
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all p-2 z-50">
+                  <div className="px-3 py-2 border-b border-slate-50 mb-1 sm:hidden">
+                    <p className="text-sm font-bold text-slate-800 truncate">{user.name}</p>
+                    <p className="text-[10px] text-slate-400">{user.email}</p>
+                  </div>
+                  <button className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">
+                    <Settings className="w-4 h-4" />
+                    <span>Settings</span>
+                  </button>
+                  <button className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">
+                    <Bell className="w-4 h-4" />
+                    <span>Notifications</span>
+                  </button>
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {!result ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {view === 'history' ? (
+          <History 
+            items={history} 
+            onSelectItem={handleSelectHistoryItem} 
+            onDeleteItem={handleDeleteHistoryItem} 
+          />
+        ) : view === 'result' && result ? (
+          <Dashboard 
+            data={result} 
+            onReset={() => setView('screen')} 
+          />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Left Column: Job & Config */}
             <div className="lg:col-span-5 space-y-6">
-              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <div className="flex items-center space-x-2 mb-4">
-                  <Briefcase className="w-5 h-5 text-blue-600" />
-                  <h2 className="text-lg font-semibold text-slate-800">Job Specification</h2>
+              <section className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+                <div className="flex items-center space-x-3 mb-6">
+                  <div className="p-2 bg-blue-50 rounded-xl">
+                    <Briefcase className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800">Job Specification</h2>
+                    <p className="text-slate-400 text-xs">Define the criteria for AI analysis</p>
+                  </div>
                 </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                       Role Category
                     </label>
                     <div className="grid grid-cols-3 gap-2">
@@ -114,10 +237,10 @@ const App: React.FC = () => {
                         <button
                           key={type}
                           onClick={() => setRoleType(type)}
-                          className={`py-2 px-3 text-sm font-medium rounded-lg transition-all ${
+                          className={`py-2.5 px-3 text-sm font-bold rounded-xl transition-all ${
                             roleType === type
-                              ? 'bg-blue-600 text-white shadow-md'
-                              : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                              ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                              : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'
                           }`}
                         >
                           {type}
@@ -127,62 +250,66 @@ const App: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                       Job Description
                     </label>
                     <textarea
                       value={jobDescription}
                       onChange={(e) => setJobDescription(e.target.value)}
                       placeholder="Paste the full job description here..."
-                      className="w-full h-64 p-4 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-slate-50/50"
+                      className="w-full h-80 p-5 text-sm border border-slate-200 rounded-3xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none resize-none bg-slate-50/50 transition-all leading-relaxed"
                     />
                   </div>
                 </div>
               </section>
 
-              <section className="bg-blue-600 rounded-2xl shadow-lg p-6 text-white overflow-hidden relative group">
+              <section className="bg-slate-900 rounded-3xl shadow-2xl p-8 text-white relative overflow-hidden group">
                 <div className="relative z-10">
-                  <h3 className="text-lg font-bold mb-2 flex items-center">
-                    <CheckCircle2 className="w-5 h-5 mr-2" />
-                    ATS Scoring Ready
+                  <h3 className="text-xl font-bold mb-3 flex items-center">
+                    <CheckCircle2 className="w-6 h-6 mr-2 text-blue-400" />
+                    Deep Analysis Ready
                   </h3>
-                  <p className="text-blue-100 text-sm mb-6 leading-relaxed">
-                    Our AI engine will analyze keywords, semantic alignment, and seniority markers across all resumes in batch mode.
+                  <p className="text-slate-400 text-sm mb-8 leading-relaxed">
+                    Our AI engine will perform cross-referencing between the JD and candidate resumes in parallel.
                   </p>
                   <button
                     disabled={isProcessing}
                     onClick={handleProcess}
-                    className="w-full py-3.5 bg-white text-blue-600 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-blue-50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-blue-900/20"
+                    className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl flex items-center justify-center space-x-3 hover:bg-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-900/40 group/btn"
                   >
                     {isProcessing ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Analyzing Batch...</span>
+                        <span>Processing Batch...</span>
                       </>
                     ) : (
                       <>
-                        <Play className="w-5 h-5 fill-current" />
+                        <Play className="w-5 h-5 fill-current group-hover/btn:scale-110 transition-transform" />
                         <span>Run Batch Screening</span>
                       </>
                     )}
                   </button>
                 </div>
-                {/* Decorative blobs */}
-                <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-500 rounded-full blur-3xl opacity-50 group-hover:opacity-70 transition-opacity"></div>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600 rounded-full blur-[100px] opacity-20 -mr-32 -mt-32"></div>
               </section>
             </div>
 
             {/* Right Column: Resumes */}
             <div className="lg:col-span-7">
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 h-full">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-2">
-                    <Users className="w-5 h-5 text-blue-600" />
-                    <h2 className="text-lg font-semibold text-slate-800">Candidate Resumes</h2>
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 h-full">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-xl">
+                      <Users className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-800">Candidate Pipeline</h2>
+                      <p className="text-slate-400 text-xs">Bulk upload resumes for ranking</p>
+                    </div>
                   </div>
                   <button
                     onClick={handleAddResume}
-                    className="flex items-center space-x-1 text-sm font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                    className="flex items-center space-x-2 text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-5 py-2.5 rounded-xl transition-all"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add Candidate</span>
@@ -190,26 +317,31 @@ const App: React.FC = () => {
                 </div>
 
                 {error && (
-                  <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start space-x-3 text-red-700 animate-in fade-in slide-in-from-top-2">
+                  <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start space-x-3 text-red-700 animate-in fade-in slide-in-from-top-2">
                     <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm font-medium">{error}</p>
+                    <p className="text-sm font-bold">{error}</p>
                   </div>
                 )}
 
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {resumes.map((resume, index) => (
                     <div 
                       key={resume.id} 
-                      className="relative group border border-slate-200 rounded-xl p-4 transition-all hover:border-blue-200 hover:shadow-md"
+                      className="relative group border border-slate-200 rounded-3xl p-6 transition-all hover:border-blue-400 hover:bg-blue-50/10"
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                          Candidate #{index + 1}
-                        </span>
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-2">
+                          <span className="w-6 h-6 bg-slate-100 rounded-lg flex items-center justify-center text-[10px] font-black text-slate-500">
+                            {index + 1}
+                          </span>
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                            Candidate Profile
+                          </span>
+                        </div>
                         {resumes.length > 1 && (
                           <button
                             onClick={() => handleRemoveResume(resume.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -218,19 +350,19 @@ const App: React.FC = () => {
                       <textarea
                         value={resume.text}
                         onChange={(e) => handleResumeChange(resume.id, e.target.value)}
-                        placeholder="Paste resume content here..."
-                        className="w-full h-40 p-4 text-sm bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 rounded-lg resize-none"
+                        placeholder="Paste full resume text content here..."
+                        className="w-full h-44 p-0 bg-transparent border-none focus:ring-0 outline-none text-sm leading-relaxed text-slate-600 placeholder:text-slate-300 resize-none"
                       />
                     </div>
                   ))}
                   
                   {resumes.length === 0 && (
-                    <div className="text-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                      <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                      <p className="text-slate-500 font-medium">No candidates added yet.</p>
+                    <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                      <FileText className="w-16 h-16 text-slate-200 mb-4" />
+                      <p className="text-slate-400 font-bold">No candidates found</p>
                       <button
                         onClick={handleAddResume}
-                        className="mt-4 text-blue-600 font-bold hover:underline"
+                        className="mt-4 text-blue-600 font-black hover:text-blue-700 underline underline-offset-4"
                       >
                         Add your first candidate
                       </button>
@@ -240,21 +372,17 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-        ) : (
-          <Dashboard 
-            data={result} 
-            onReset={() => {
-              setResult(null);
-              setError(null);
-            }} 
-          />
         )}
       </main>
       
-      <footer className="py-8 border-t border-slate-200 bg-white">
+      <footer className="py-12 border-t border-slate-100 bg-white">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-slate-500 text-sm">
-            &copy; 2024 ResuMatch Pro. Enterprise-grade AI analysis for recruitment teams.
+          <div className="flex items-center justify-center space-x-2 mb-4">
+            <Search className="w-5 h-5 text-slate-300" />
+            <span className="text-sm font-black text-slate-300 uppercase tracking-[0.2em]">ResuMatch Pro</span>
+          </div>
+          <p className="text-slate-400 text-xs">
+            &copy; 2024 ResuMatch Pro. Secure Enterprise-Grade Recruitment Intelligence.
           </p>
         </div>
       </footer>

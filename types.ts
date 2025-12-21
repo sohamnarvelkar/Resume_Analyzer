@@ -50,3 +50,18 @@ export interface ResumeInput {
   id: string;
   text: string;
 }
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
+export interface HistoryItem {
+  id: string;
+  timestamp: number;
+  role: RoleType;
+  candidateCount: number;
+  data: ScreenerOutput;
+}

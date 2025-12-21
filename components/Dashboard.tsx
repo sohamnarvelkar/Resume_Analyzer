@@ -17,7 +17,8 @@ import {
   Zap,
   Users,
   Info,
-  Calculator
+  Calculator,
+  Search
 } from 'lucide-react';
 import { ScreenerOutput, CandidateResult, ScoreBreakdown } from '../types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
@@ -51,6 +52,42 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
     }
   };
 
+  const highlightKeywords = (text: string, keywords: string[]) => {
+    if (!keywords.length) return text;
+    
+    // Sort keywords by length descending to handle overlapping terms (e.g. 'React Native' before 'React')
+    const sortedKeywords = [...keywords]
+      .filter(kw => kw.trim().length > 0)
+      .sort((a, b) => b.length - a.length);
+
+    // Escaping regex special characters
+    const escapedKeywords = sortedKeywords
+      .map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      
+    if (escapedKeywords.length === 0) return text;
+
+    // Use word boundaries and join with pipes
+    const regex = new RegExp(`(\\b${escapedKeywords.join('\\b|\\b')}\\b)`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, i) => {
+      const isMatch = keywords.some(kw => kw.toLowerCase() === part.toLowerCase());
+      if (isMatch) {
+        return (
+          <span 
+            key={i} 
+            className="inline-flex items-center bg-amber-100 text-amber-900 font-extrabold px-1.5 py-0.5 rounded-md border border-amber-200 shadow-sm text-[0.92em] mx-0.5 ring-1 ring-amber-400/20"
+            title="Matched JD Keyword"
+          >
+            <Search className="w-2.5 h-2.5 mr-1 text-amber-600 stroke-[3px]" />
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   const chartData = selectedCandidate ? [
     { name: 'ATS Match', score: selectedCandidate.score_breakdown?.ats_match || 0, weight: '35%', color: '#3b82f6' },
     { name: 'Experience', score: selectedCandidate.score_breakdown?.experience || 0, weight: '25%', color: '#6366f1' },
@@ -70,7 +107,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
           <ArrowLeft className="w-4 h-4" />
           <span>New Analysis</span>
         </button>
-        <div className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-full border border-blue-100 text-sm font-semibold">
+        <div className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-full border border-blue-100 text-sm font-semibold shadow-sm">
           <Target className="w-4 h-4" />
           <span>{data.job_analysis.role_type} Role Analysis</span>
         </div>
@@ -225,29 +262,29 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-6">
                     <div>
-                      <h4 className="flex items-center text-sm font-bold text-slate-800 mb-3">
+                      <h4 className="flex items-center text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">
                         <CheckCircle2 className="w-4 h-4 text-emerald-500 mr-2" />
-                        Key Strengths
+                        Key Strengths & Alignment
                       </h4>
-                      <ul className="space-y-2">
+                      <ul className="space-y-4">
                         {selectedCandidate.strengths.map((s, i) => (
-                          <li key={i} className="flex items-start text-sm text-slate-600">
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-300 mt-0.5 mr-1" />
-                            {s}
+                          <li key={i} className="flex items-start text-sm text-slate-600 leading-relaxed group">
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-300 mt-1 mr-1.5 flex-shrink-0 group-hover:text-blue-400 transition-colors" />
+                            <span className="flex flex-wrap">{highlightKeywords(s, data.job_analysis.required_keywords)}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
 
                     <div>
-                      <h4 className="flex items-center text-sm font-bold text-slate-800 mb-3">
+                      <h4 className="flex items-center text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">
                         <AlertTriangle className="w-4 h-4 text-amber-500 mr-2" />
-                        Areas of Concern / Gaps
+                        Gap Analysis
                       </h4>
-                      <ul className="space-y-2">
+                      <ul className="space-y-3">
                         {selectedCandidate.gaps.map((g, i) => (
-                          <li key={i} className="flex items-start text-sm text-slate-600">
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-300 mt-0.5 mr-1" />
+                          <li key={i} className="flex items-start text-sm text-slate-600 leading-relaxed">
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-300 mt-1 mr-1.5 flex-shrink-0" />
                             {g}
                           </li>
                         ))}
@@ -256,31 +293,32 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                   </div>
 
                   <div className="space-y-6">
-                    <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center">
+                    <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-100 rounded-full blur-3xl opacity-20 -mr-8 -mt-8 group-hover:opacity-40 transition-opacity"></div>
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center uppercase tracking-wider relative z-10">
                         <Award className="w-4 h-4 text-blue-500 mr-2" />
                         Hiring Justification
                       </h4>
-                      <div className="space-y-3">
+                      <div className="space-y-5 relative z-10">
                         {selectedCandidate.justification.map((j, i) => (
-                          <p key={i} className="text-xs text-slate-600 leading-relaxed italic border-l-2 border-slate-200 pl-3">
-                            "{j}"
-                          </p>
+                          <div key={i} className="text-[13px] text-slate-600 leading-relaxed italic border-l-2 border-blue-200 pl-4 py-1">
+                            "{highlightKeywords(j, data.job_analysis.required_keywords)}"
+                          </div>
                         ))}
                       </div>
                     </div>
 
                     <div>
-                      <h4 className="text-sm font-bold text-slate-800 mb-3">Missing Critical Keywords</h4>
-                      <div className="flex flex-wrap gap-1.5">
+                      <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">Missing Critical Keywords</h4>
+                      <div className="flex flex-wrap gap-2">
                         {selectedCandidate.missing_keywords.length > 0 ? (
                           selectedCandidate.missing_keywords.map((kw, i) => (
-                            <span key={i} className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded uppercase border border-red-100">
+                            <span key={i} className="px-2.5 py-1 bg-red-50 text-red-600 text-[10px] font-black rounded-lg uppercase border border-red-100 shadow-sm">
                               {kw}
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-400 italic">No critical keywords missing</span>
+                          <span className="text-xs text-slate-400 italic bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full border border-emerald-100">All critical keywords identified</span>
                         )}
                       </div>
                     </div>
@@ -291,11 +329,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                 <div className="mt-10 pt-8 border-t border-slate-100">
                   <button 
                     onClick={() => setShowBreakdown(!showBreakdown)}
-                    className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors border border-slate-200"
+                    className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all border border-slate-200 group"
                   >
                     <div className="flex items-center space-x-2">
-                      <Calculator className="w-5 h-5 text-blue-600" />
-                      <span className="font-bold text-slate-800">Scoring Methodology Breakdown</span>
+                      <Calculator className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
+                      <span className="font-bold text-slate-800">Explainable AI: Scoring Methodology</span>
                     </div>
                     {showBreakdown ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
                   </button>
@@ -305,7 +343,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-4">
                           <p className="text-sm text-slate-500 leading-relaxed">
-                            The final score of <span className="font-bold text-slate-800">{selectedCandidate.fit_score}</span> is calculated using a weighted average of individual category scores:
+                            The final fit score of <span className="font-black text-blue-600">{selectedCandidate.fit_score}</span> is a weighted composite of individual performance markers:
                           </p>
                           <div className="space-y-3 text-xs">
                             <div className="flex justify-between items-center py-2 border-b border-slate-50">
@@ -328,9 +366,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                               <span className="text-slate-600">Education & Certs (10%)</span>
                               <span className="font-mono font-bold text-blue-600">{(selectedCandidate.score_breakdown.education * 0.10).toFixed(1)} pts</span>
                             </div>
-                            <div className="flex justify-between items-center py-3 bg-blue-50 px-3 rounded-lg mt-2">
-                              <span className="font-bold text-blue-800 uppercase tracking-widest text-[10px]">Total Weighted Fit</span>
-                              <span className="font-black text-blue-700 text-sm">{selectedCandidate.fit_score}%</span>
+                            <div className="flex justify-between items-center py-3 bg-blue-600 px-4 rounded-xl mt-3 shadow-lg shadow-blue-200">
+                              <span className="font-bold text-white uppercase tracking-widest text-[10px]">Composite Fit Index</span>
+                              <span className="font-black text-white text-lg">{selectedCandidate.fit_score}%</span>
                             </div>
                           </div>
                         </div>
@@ -344,7 +382,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                             >
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                               <XAxis type="number" domain={[0, 100]} hide />
-                              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} width={80} />
+                              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} width={80} />
                               <Tooltip 
                                 cursor={{ fill: '#f8fafc' }}
                                 content={({ active, payload }) => {
@@ -353,8 +391,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                                     return (
                                       <div className="bg-white p-3 rounded-xl shadow-xl border border-slate-100">
                                         <p className="text-xs font-bold text-slate-800 mb-1">{data.name}</p>
-                                        <p className="text-[10px] text-slate-500">Score: {data.score}/100</p>
-                                        <p className="text-[10px] text-blue-600 font-bold">Weight: {data.weight}</p>
+                                        <p className="text-[10px] text-slate-500 font-medium">Performance: {data.score}/100</p>
+                                        <p className="text-[10px] text-blue-600 font-black">Weight: {data.weight}</p>
                                       </div>
                                     );
                                   }
@@ -368,8 +406,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>
-                          <div className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest mt-2">
-                             Raw Category Performance (0-100)
+                          <div className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest mt-4">
+                             Raw Performance Index (Normalization)
                           </div>
                         </div>
                       </div>
@@ -380,39 +418,39 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
 
               {/* Summary Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow">
                   <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
                     <Briefcase className="w-6 h-6" />
                   </div>
                   <div>
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Experience</div>
-                    <div className="text-lg font-bold text-slate-800">{selectedCandidate.experience_years}</div>
+                    <div className="text-lg font-black text-slate-800">{selectedCandidate.experience_years}</div>
                   </div>
                 </div>
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow">
                   <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
                     <GraduationCap className="w-6 h-6" />
                   </div>
                   <div>
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Education Match</div>
-                    <div className="text-lg font-bold text-slate-800">{selectedCandidate.score_breakdown?.education || 0}%</div>
+                    <div className="text-lg font-black text-slate-800">{selectedCandidate.score_breakdown?.education || 0}%</div>
                   </div>
                 </div>
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow">
                   <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
                     <Target className="w-6 h-6" />
                   </div>
                   <div>
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Seniority Fit</div>
-                    <div className="text-lg font-bold text-slate-800">{selectedCandidate.score_breakdown?.seniority || 0}%</div>
+                    <div className="text-lg font-black text-slate-800">{selectedCandidate.score_breakdown?.seniority || 0}%</div>
                   </div>
                 </div>
               </div>
             </>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 p-12 min-h-[400px]">
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 p-12 min-h-[400px] animate-pulse">
               <Users className="w-12 h-12 mb-4 opacity-20" />
-              <p className="font-medium">Select a candidate from the ranking list to view deep-dive analysis</p>
+              <p className="font-bold tracking-tight">Select a candidate from the ranking list to view deep-dive analysis</p>
             </div>
           )}
         </div>
