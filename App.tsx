@@ -15,7 +15,10 @@ import {
   LogOut,
   ChevronLeft,
   Settings,
-  Bell
+  Bell,
+  X,
+  RefreshCcw,
+  Info
 } from 'lucide-react';
 import { RoleType, ResumeInput, ScreenerOutput, User, HistoryItem } from './types';
 import { screenResumes } from './geminiService';
@@ -39,8 +42,9 @@ const App: React.FC = () => {
   const [jobDescription, setJobDescription] = useState('');
   const [resumes, setResumes] = useState<ResumeInput[]>([{ id: '1', text: '' }]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
   const [result, setResult] = useState<ScreenerOutput | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; details?: string } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('resu_history', JSON.stringify(history));
@@ -56,6 +60,7 @@ const App: React.FC = () => {
 
   const handleAddResume = () => {
     setResumes([...resumes, { id: Date.now().toString(), text: '' }]);
+    if (error) setError(null);
   };
 
   const handleRemoveResume = (id: string) => {
@@ -66,28 +71,38 @@ const App: React.FC = () => {
 
   const handleResumeChange = (id: string, text: string) => {
     setResumes(resumes.map(r => r.id === id ? { ...r, text } : r));
+    if (error) setError(null);
   };
 
   const handleProcess = async () => {
+    // Basic Input Validation
     if (!jobDescription.trim()) {
-      setError('Please provide a job description.');
+      setError({ message: 'Missing Job Description', details: 'The analysis engine requires a job description to cross-reference against resumes.' });
       return;
     }
-    const filledResumes = resumes.filter(r => r.text.trim() !== '');
+
+    const filledResumes = resumes.filter(r => r.text.trim().length > 10);
     if (filledResumes.length === 0) {
-      setError('Please add at least one candidate resume.');
+      setError({ message: 'No Resumes Found', details: 'Please paste at least one candidate resume with meaningful content (minimum 10 characters).' });
       return;
     }
 
     setIsProcessing(true);
+    setProcessingStep('Analyzing Job Description...');
     setError(null);
 
     try {
+      // Small simulated delay for UX feel
+      await new Promise(r => setTimeout(r, 800));
+      setProcessingStep('Cross-referencing candidates...');
+      
       const data = await screenResumes(
         roleType, 
         jobDescription, 
         filledResumes.map(r => r.text)
       );
+      
+      setProcessingStep('Finalizing rankings...');
       
       const newHistoryItem: HistoryItem = {
         id: Date.now().toString(),
@@ -101,9 +116,13 @@ const App: React.FC = () => {
       setResult(data);
       setView('result');
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred.');
+      setError({ 
+        message: 'Analysis Failed', 
+        details: err.message || 'An unexpected error occurred during processing.' 
+      });
     } finally {
       setIsProcessing(false);
+      setProcessingStep('');
     }
   };
 
@@ -119,7 +138,10 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     setView('screen');
+    setError(null);
   };
+
+  const dismissError = () => setError(null);
 
   if (!user) {
     return <Auth onLogin={setUser} />;
@@ -133,10 +155,13 @@ const App: React.FC = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
               <div 
-                className="flex items-center space-x-2 cursor-pointer" 
-                onClick={() => setView('screen')}
+                className="flex items-center space-x-2 cursor-pointer group" 
+                onClick={() => {
+                  setView('screen');
+                  setError(null);
+                }}
               >
-                <div className="bg-blue-600 p-2 rounded-lg">
+                <div className="bg-blue-600 p-2 rounded-lg group-hover:scale-105 transition-transform">
                   <Search className="w-5 h-5 text-white" />
                 </div>
                 <span className="text-xl font-bold tracking-tight text-slate-800 hidden sm:block">
@@ -146,13 +171,13 @@ const App: React.FC = () => {
 
               <div className="hidden md:flex items-center space-x-1">
                 <button 
-                  onClick={() => setView('screen')}
+                  onClick={() => { setView('screen'); setError(null); }}
                   className={`px-4 py-2 text-sm font-bold rounded-xl transition-all ${view === 'screen' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                   Screening
                 </button>
                 <button 
-                  onClick={() => setView('history')}
+                  onClick={() => { setView('history'); setError(null); }}
                   className={`px-4 py-2 text-sm font-bold rounded-xl flex items-center space-x-2 transition-all ${view === 'history' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                   <HistoryIcon className="w-4 h-4" />
@@ -201,6 +226,40 @@ const App: React.FC = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* Persistent Error Alert */}
+        {error && (
+          <div className="mb-8 p-5 bg-red-50 border border-red-200 rounded-2xl shadow-sm flex items-start justify-between animate-in slide-in-from-top-4">
+            <div className="flex items-start space-x-4">
+              <div className="p-2 bg-red-100 text-red-600 rounded-xl">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-red-800 uppercase tracking-wider">{error.message}</h3>
+                <p className="text-sm text-red-600 mt-1 leading-relaxed max-w-2xl">{error.details}</p>
+                <div className="mt-3 flex items-center space-x-4">
+                  <button 
+                    onClick={handleProcess}
+                    className="flex items-center space-x-1.5 text-xs font-bold text-red-700 hover:underline"
+                  >
+                    <RefreshCcw className="w-3.5 h-3.5" />
+                    <span>Retry Analysis</span>
+                  </button>
+                  <div className="flex items-center space-x-1.5 text-xs font-bold text-red-400">
+                    <Info className="w-3.5 h-3.5" />
+                    <span>Check your inputs for special characters or length</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={dismissError}
+              className="p-1.5 text-red-300 hover:text-red-500 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
         {view === 'history' ? (
           <History 
             items={history} 
@@ -210,7 +269,10 @@ const App: React.FC = () => {
         ) : view === 'result' && result ? (
           <Dashboard 
             data={result} 
-            onReset={() => setView('screen')} 
+            onReset={() => {
+              setView('screen');
+              setError(null);
+            }} 
           />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -255,9 +317,14 @@ const App: React.FC = () => {
                     </label>
                     <textarea
                       value={jobDescription}
-                      onChange={(e) => setJobDescription(e.target.value)}
-                      placeholder="Paste the full job description here..."
-                      className="w-full h-80 p-5 text-sm border border-slate-200 rounded-3xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none resize-none bg-slate-50/50 transition-all leading-relaxed"
+                      onChange={(e) => {
+                        setJobDescription(e.target.value);
+                        if (error) setError(null);
+                      }}
+                      placeholder="Paste the full job description here (min 50 chars recommended)..."
+                      className={`w-full h-80 p-5 text-sm border rounded-3xl focus:ring-4 outline-none resize-none bg-slate-50/50 transition-all leading-relaxed ${
+                        error?.message === 'Missing Job Description' ? 'border-red-300 ring-red-100' : 'border-slate-200 focus:ring-blue-500/10 focus:border-blue-500'
+                      }`}
                     />
                   </div>
                 </div>
@@ -275,18 +342,23 @@ const App: React.FC = () => {
                   <button
                     disabled={isProcessing}
                     onClick={handleProcess}
-                    className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl flex items-center justify-center space-x-3 hover:bg-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-900/40 group/btn"
+                    className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl flex flex-col items-center justify-center hover:bg-blue-500 transition-all disabled:opacity-80 disabled:cursor-not-allowed shadow-xl shadow-blue-900/40 group/btn"
                   >
                     {isProcessing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Processing Batch...</span>
-                      </>
+                      <div className="flex flex-col items-center space-y-2">
+                        <div className="flex items-center space-x-3">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Processing Batch...</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest animate-pulse">
+                          {processingStep}
+                        </span>
+                      </div>
                     ) : (
-                      <>
+                      <div className="flex items-center space-x-3">
                         <Play className="w-5 h-5 fill-current group-hover/btn:scale-110 transition-transform" />
                         <span>Run Batch Screening</span>
-                      </>
+                      </div>
                     )}
                   </button>
                 </div>
@@ -296,7 +368,7 @@ const App: React.FC = () => {
 
             {/* Right Column: Resumes */}
             <div className="lg:col-span-7">
-              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 h-full">
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-8">
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-purple-50 rounded-xl">
@@ -304,7 +376,7 @@ const App: React.FC = () => {
                     </div>
                     <div>
                       <h2 className="text-xl font-bold text-slate-800">Candidate Pipeline</h2>
-                      <p className="text-slate-400 text-xs">Bulk upload resumes for ranking</p>
+                      <p className="text-slate-400 text-xs">Bulk upload resumes for ranking ({resumes.length})</p>
                     </div>
                   </div>
                   <button
@@ -316,27 +388,29 @@ const App: React.FC = () => {
                   </button>
                 </div>
 
-                {error && (
-                  <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start space-x-3 text-red-700 animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm font-bold">{error}</p>
-                  </div>
-                )}
-
-                <div className="space-y-6">
+                <div className="space-y-6 flex-grow overflow-y-auto max-h-[800px] pr-2 custom-scrollbar">
                   {resumes.map((resume, index) => (
                     <div 
                       key={resume.id} 
-                      className="relative group border border-slate-200 rounded-3xl p-6 transition-all hover:border-blue-400 hover:bg-blue-50/10"
+                      className={`relative group border rounded-3xl p-6 transition-all hover:border-blue-400 hover:bg-blue-50/10 ${
+                        error?.message === 'No Resumes Found' ? 'border-red-200 bg-red-50/5' : 'border-slate-200'
+                      }`}
                     >
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
-                          <span className="w-6 h-6 bg-slate-100 rounded-lg flex items-center justify-center text-[10px] font-black text-slate-500">
+                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${
+                            resume.text.trim().length > 10 ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                          }`}>
                             {index + 1}
                           </span>
                           <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
                             Candidate Profile
                           </span>
+                          {resume.text.trim().length > 10 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
+                              Content Detected
+                            </span>
+                          )}
                         </div>
                         {resumes.length > 1 && (
                           <button
@@ -350,7 +424,7 @@ const App: React.FC = () => {
                       <textarea
                         value={resume.text}
                         onChange={(e) => handleResumeChange(resume.id, e.target.value)}
-                        placeholder="Paste full resume text content here..."
+                        placeholder="Paste full resume text content here (Experience, Skills, Projects)..."
                         className="w-full h-44 p-0 bg-transparent border-none focus:ring-0 outline-none text-sm leading-relaxed text-slate-600 placeholder:text-slate-300 resize-none"
                       />
                     </div>
@@ -386,6 +460,23 @@ const App: React.FC = () => {
           </p>
         </div>
       </footer>
+      
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+      `}</style>
     </div>
   );
 };

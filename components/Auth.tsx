@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, User as UserIcon, LogIn, Github, Search, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, LogIn, Github, Search, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react';
 import { User } from '../types';
 
 interface AuthProps {
@@ -14,6 +14,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsVisible(true);
@@ -21,6 +22,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
+    // Basic form validation
+    if (!email || !password || (!isLogin && !name)) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+
     setIsLoading(true);
     
     // Simulate network delay for a more realistic feel
@@ -36,6 +45,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   };
 
   const handleGoogleLogin = () => {
+    setError(null);
     setIsLoading(true);
     setTimeout(() => {
       const mockUser: User = {
@@ -43,6 +53,20 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         name: 'Google User',
         email: 'google@example.com',
         avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=google'
+      };
+      onLogin(mockUser);
+    }, 600);
+  };
+
+  const handleGithubLogin = () => {
+    setError(null);
+    setIsLoading(true);
+    setTimeout(() => {
+      const mockUser: User = {
+        id: 'github-user-456',
+        name: 'GitHub Contributor',
+        email: 'github-dev@example.com',
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=github'
       };
       onLogin(mockUser);
     }, 600);
@@ -135,15 +159,22 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </p>
           </div>
 
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center space-x-3 text-red-700 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-xs font-bold">{error}</p>
+            </div>
+          )}
+
           <div className="flex bg-slate-100 p-1 rounded-2xl mb-8">
             <button 
-              onClick={() => setIsLogin(true)}
+              onClick={() => { setIsLogin(true); setError(null); }}
               className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${isLogin ? 'bg-white text-blue-600 shadow-lg shadow-blue-100' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Sign In
             </button>
             <button 
-              onClick={() => setIsLogin(false)}
+              onClick={() => { setIsLogin(false); setError(null); }}
               className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${!isLogin ? 'bg-white text-blue-600 shadow-lg shadow-blue-100' : 'text-slate-400 hover:text-slate-600'}`}
             >
               Sign Up
@@ -245,6 +276,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <span>Google</span>
             </button>
             <button 
+              onClick={handleGithubLogin}
               disabled={isLoading}
               className="flex items-center justify-center space-x-3 py-3.5 border border-slate-200 rounded-2xl hover:bg-slate-50 hover:border-slate-300 transition-all text-sm font-bold text-slate-700 active:scale-[0.98]"
             >

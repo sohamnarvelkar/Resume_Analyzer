@@ -18,7 +18,8 @@ import {
   Users,
   Info,
   Calculator,
-  Search
+  Search,
+  HelpCircle
 } from 'lucide-react';
 import { ScreenerOutput, CandidateResult, ScoreBreakdown } from '../types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
@@ -33,6 +34,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
     data.candidates[0]?.candidate_id || null
   );
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [hoveredScore, setHoveredScore] = useState(false);
 
   const selectedCandidate = data.candidates.find(c => c.candidate_id === selectedCandidateId);
 
@@ -55,18 +57,15 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
   const highlightKeywords = (text: string, keywords: string[]) => {
     if (!keywords.length) return text;
     
-    // Sort keywords by length descending to handle overlapping terms (e.g. 'React Native' before 'React')
     const sortedKeywords = [...keywords]
       .filter(kw => kw.trim().length > 0)
       .sort((a, b) => b.length - a.length);
 
-    // Escaping regex special characters
     const escapedKeywords = sortedKeywords
       .map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
       
     if (escapedKeywords.length === 0) return text;
 
-    // Use word boundaries and join with pipes
     const regex = new RegExp(`(\\b${escapedKeywords.join('\\b|\\b')}\\b)`, 'gi');
     const parts = text.split(regex);
     
@@ -197,7 +196,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
                   <div className="flex items-center space-x-6">
-                    <div className="relative">
+                    <div 
+                      className="relative cursor-help"
+                      onMouseEnter={() => setHoveredScore(true)}
+                      onMouseLeave={() => setHoveredScore(false)}
+                    >
                       <svg className="w-24 h-24 transform -rotate-90">
                         <circle
                           cx="48"
@@ -225,6 +228,42 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                         <span className="text-2xl font-black text-slate-800 leading-none">{selectedCandidate.fit_score}</span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase">Score</span>
                       </div>
+
+                      {/* Score Tooltip */}
+                      {hoveredScore && selectedCandidate.score_breakdown && (
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 z-50 w-64 bg-slate-900 text-white rounded-xl shadow-2xl p-4 text-xs animate-in fade-in zoom-in-95">
+                          <div className="flex items-center space-x-2 mb-3 border-b border-white/10 pb-2">
+                            <Calculator className="w-3.5 h-3.5 text-blue-400" />
+                            <span className="font-bold uppercase tracking-widest">Weighted Breakdown</span>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">ATS Match (35%)</span>
+                              <span className="font-bold">{(selectedCandidate.score_breakdown.ats_match * 0.35).toFixed(1)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Experience (25%)</span>
+                              <span className="font-bold">{(selectedCandidate.score_breakdown.experience * 0.25).toFixed(1)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Skills Alignment (20%)</span>
+                              <span className="font-bold">{(selectedCandidate.score_breakdown.skills * 0.20).toFixed(1)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Seniority/Scope (10%)</span>
+                              <span className="font-bold">{(selectedCandidate.score_breakdown.seniority * 0.10).toFixed(1)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Education (10%)</span>
+                              <span className="font-bold">{(selectedCandidate.score_breakdown.education * 0.10).toFixed(1)}</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-white/10 text-center font-black text-blue-400 uppercase tracking-tighter">
+                            Total Fit Score: {selectedCandidate.fit_score}%
+                          </div>
+                          <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-900 rotate-45"></div>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <h2 className="text-2xl font-black text-slate-900 mb-1">{selectedCandidate.candidate_id}</h2>
@@ -333,47 +372,100 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                   >
                     <div className="flex items-center space-x-2">
                       <Calculator className="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" />
-                      <span className="font-bold text-slate-800">Explainable AI: Scoring Methodology</span>
+                      <div className="text-left">
+                        <span className="font-bold text-slate-800 block">Explainable AI: Scoring Methodology</span>
+                        <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Click to toggle mathematical breakdown</span>
+                      </div>
                     </div>
                     {showBreakdown ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
                   </button>
 
                   {showBreakdown && selectedCandidate.score_breakdown && (
-                    <div className="mt-4 p-6 bg-white border border-slate-200 rounded-xl shadow-inner space-y-6 animate-in slide-in-from-top-2">
+                    <div className="mt-4 p-8 bg-white border border-slate-200 rounded-2xl shadow-inner space-y-8 animate-in slide-in-from-top-2">
+                      
+                      {/* Visual Formula Display */}
+                      <div className="bg-blue-50/50 rounded-2xl p-6 border border-blue-100">
+                        <div className="flex items-center space-x-2 mb-4 text-blue-800">
+                          <HelpCircle className="w-4 h-4" />
+                          <h4 className="font-bold text-xs uppercase tracking-wider">Calculation Formula</h4>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono leading-loose">
+                          <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm flex flex-col">
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">ATS Match</span>
+                            <span className="font-black text-blue-600">({selectedCandidate.score_breakdown.ats_match} × 0.35)</span>
+                          </div>
+                          <span className="text-blue-300 font-bold text-lg">+</span>
+                          <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm flex flex-col">
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Experience</span>
+                            <span className="font-black text-blue-600">({selectedCandidate.score_breakdown.experience} × 0.25)</span>
+                          </div>
+                          <span className="text-blue-300 font-bold text-lg">+</span>
+                          <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm flex flex-col">
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Skills</span>
+                            <span className="font-black text-blue-600">({selectedCandidate.score_breakdown.skills} × 0.20)</span>
+                          </div>
+                          <span className="text-blue-300 font-bold text-lg">+</span>
+                          <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm flex flex-col">
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Seniority</span>
+                            <span className="font-black text-blue-600">({selectedCandidate.score_breakdown.seniority} × 0.10)</span>
+                          </div>
+                          <span className="text-blue-300 font-bold text-lg">+</span>
+                          <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm flex flex-col">
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Education</span>
+                            <span className="font-black text-blue-600">({selectedCandidate.score_breakdown.education} × 0.10)</span>
+                          </div>
+                          <span className="text-slate-400 font-bold text-lg">=</span>
+                          <div className="bg-blue-600 px-4 py-2 rounded-lg text-white shadow-lg shadow-blue-200">
+                             <span className="font-black text-base">{selectedCandidate.fit_score}%</span>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-4">
                           <p className="text-sm text-slate-500 leading-relaxed">
-                            The final fit score of <span className="font-black text-blue-600">{selectedCandidate.fit_score}</span> is a weighted composite of individual performance markers:
+                            Individual category scores are normalized on a scale of 0-100 based on the job requirements defined in the specification phase.
                           </p>
                           <div className="space-y-3 text-xs">
-                            <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                              <span className="text-slate-600">ATS Keyword Match (35%)</span>
-                              <span className="font-mono font-bold text-blue-600">{(selectedCandidate.score_breakdown.ats_match * 0.35).toFixed(1)} pts</span>
+                            <div className="flex justify-between items-center py-2 border-b border-slate-50 group hover:bg-slate-50 rounded px-2 transition-colors">
+                              <span className="text-slate-600">ATS Keyword Match</span>
+                              <div className="text-right">
+                                <span className="font-bold text-slate-800 block">{selectedCandidate.score_breakdown.ats_match}/100</span>
+                                <span className="text-[9px] text-blue-500 font-bold uppercase">Weight 35%</span>
+                              </div>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                              <span className="text-slate-600">Role Experience (25%)</span>
-                              <span className="font-mono font-bold text-blue-600">{(selectedCandidate.score_breakdown.experience * 0.25).toFixed(1)} pts</span>
+                            <div className="flex justify-between items-center py-2 border-b border-slate-50 group hover:bg-slate-50 rounded px-2 transition-colors">
+                              <span className="text-slate-600">Role-Relevant Experience</span>
+                              <div className="text-right">
+                                <span className="font-bold text-slate-800 block">{selectedCandidate.score_breakdown.experience}/100</span>
+                                <span className="text-[9px] text-blue-500 font-bold uppercase">Weight 25%</span>
+                              </div>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                              <span className="text-slate-600">Skills Alignment (20%)</span>
-                              <span className="font-mono font-bold text-blue-600">{(selectedCandidate.score_breakdown.skills * 0.20).toFixed(1)} pts</span>
+                            <div className="flex justify-between items-center py-2 border-b border-slate-50 group hover:bg-slate-50 rounded px-2 transition-colors">
+                              <span className="text-slate-600">Skills & Tools Alignment</span>
+                              <div className="text-right">
+                                <span className="font-bold text-slate-800 block">{selectedCandidate.score_breakdown.skills}/100</span>
+                                <span className="text-[9px] text-blue-500 font-bold uppercase">Weight 20%</span>
+                              </div>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                              <span className="text-slate-600">Seniority & Scope (10%)</span>
-                              <span className="font-mono font-bold text-blue-600">{(selectedCandidate.score_breakdown.seniority * 0.10).toFixed(1)} pts</span>
+                            <div className="flex justify-between items-center py-2 border-b border-slate-50 group hover:bg-slate-50 rounded px-2 transition-colors">
+                              <span className="text-slate-600">Seniority fit / Scope</span>
+                              <div className="text-right">
+                                <span className="font-bold text-slate-800 block">{selectedCandidate.score_breakdown.seniority}/100</span>
+                                <span className="text-[9px] text-blue-500 font-bold uppercase">Weight 10%</span>
+                              </div>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                              <span className="text-slate-600">Education & Certs (10%)</span>
-                              <span className="font-mono font-bold text-blue-600">{(selectedCandidate.score_breakdown.education * 0.10).toFixed(1)} pts</span>
-                            </div>
-                            <div className="flex justify-between items-center py-3 bg-blue-600 px-4 rounded-xl mt-3 shadow-lg shadow-blue-200">
-                              <span className="font-bold text-white uppercase tracking-widest text-[10px]">Composite Fit Index</span>
-                              <span className="font-black text-white text-lg">{selectedCandidate.fit_score}%</span>
+                            <div className="flex justify-between items-center py-2 border-b border-slate-50 group hover:bg-slate-50 rounded px-2 transition-colors">
+                              <span className="text-slate-600">Education & Certifications</span>
+                              <div className="text-right">
+                                <span className="font-bold text-slate-800 block">{selectedCandidate.score_breakdown.education}/100</span>
+                                <span className="text-[9px] text-blue-500 font-bold uppercase">Weight 10%</span>
+                              </div>
                             </div>
                           </div>
                         </div>
 
-                        <div className="h-64">
+                        <div className="h-72">
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart 
                               layout="vertical" 
@@ -392,7 +484,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                                       <div className="bg-white p-3 rounded-xl shadow-xl border border-slate-100">
                                         <p className="text-xs font-bold text-slate-800 mb-1">{data.name}</p>
                                         <p className="text-[10px] text-slate-500 font-medium">Performance: {data.score}/100</p>
-                                        <p className="text-[10px] text-blue-600 font-black">Weight: {data.weight}</p>
+                                        <p className="text-[10px] text-blue-600 font-black">Impact: {data.weight} total</p>
                                       </div>
                                     );
                                   }
@@ -407,7 +499,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                             </BarChart>
                           </ResponsiveContainer>
                           <div className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest mt-4">
-                             Raw Performance Index (Normalization)
+                             Categorized Performance Markers
                           </div>
                         </div>
                       </div>
@@ -418,8 +510,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
 
               {/* Summary Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow group">
+                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
                     <Briefcase className="w-6 h-6" />
                   </div>
                   <div>
@@ -427,8 +519,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                     <div className="text-lg font-black text-slate-800">{selectedCandidate.experience_years}</div>
                   </div>
                 </div>
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow group">
+                  <div className="p-3 bg-purple-50 text-purple-600 rounded-xl group-hover:scale-110 transition-transform">
                     <GraduationCap className="w-6 h-6" />
                   </div>
                   <div>
@@ -436,8 +528,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
                     <div className="text-lg font-black text-slate-800">{selectedCandidate.score_breakdown?.education || 0}%</div>
                   </div>
                 </div>
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 flex items-center space-x-4 shadow-sm hover:shadow-md transition-shadow group">
+                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:scale-110 transition-transform">
                     <Target className="w-6 h-6" />
                   </div>
                   <div>

@@ -4,11 +4,41 @@ import { RoleType, ScreenerOutput } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
+/**
+ * Robustly parses JSON from model output, handling potential markdown code block wrappers.
+ */
+const safeParseScreenerOutput = (text: string): ScreenerOutput => {
+  try {
+    // Attempt direct parse first
+    return JSON.parse(text);
+  } catch (e) {
+    // If it fails, try to strip markdown code blocks
+    const cleaned = text.replace(/```json|```/gi, '').trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch (innerError) {
+      console.error("JSON Parsing failed after cleanup. Content:", text);
+      throw new Error("The AI provided an invalid data format. Please try again.");
+    }
+  }
+};
+
 export const screenResumes = async (
   roleType: RoleType,
   jobDescription: string,
   resumes: string[]
 ): Promise<ScreenerOutput> => {
+  // 1. Pre-flight Validation
+  if (!process.env.API_KEY) {
+    throw new Error("API Key is missing. Please ensure your environment is configured correctly.");
+  }
+  if (!jobDescription || jobDescription.trim().length < 50) {
+    throw new Error("Job description is too short. Please provide more detail for accurate analysis.");
+  }
+  if (resumes.length === 0) {
+    throw new Error("No resumes provided for analysis.");
+  }
+
   const model = "gemini-3-pro-preview";
 
   const prompt = `
@@ -86,10 +116,26 @@ export const screenResumes = async (
       },
     });
 
-    const resultText = response.text || "";
-    return JSON.parse(resultText) as ScreenerOutput;
-  } catch (error) {
+    const resultText = response.text;
+    if (!resultText) {
+      throw new Error("The AI engine failed to generate a response. This might be due to content safety filters or a transient error.");
+    }
+    
+    return safeParseScreenerOutput(resultText);
+  } catch (error: any) {
     console.error("Screening error:", error);
-    throw new Error("Failed to process resumes. Please ensure the API key is valid and inputs are reasonable.");
+    
+    // Categorize errors for better user feedback
+    if (error.message?.includes('429')) {
+      throw new Error("Rate limit exceeded. Please wait a moment before trying again.");
+    }
+    if (error.message?.includes('401') || error.message?.includes('403')) {
+      throw new Error("Authentication failed. Your API key might be invalid or expired.");
+    }
+    if (error.message?.includes('format') || error.message?.includes('JSON')) {
+      throw error; // Re-throw parsing errors as they are already handled
+    }
+    
+    throw new Error(error.message || "An unexpected error occurred during analysis. Please check your network and try again.");
   }
 };
