@@ -18,9 +18,13 @@ import {
   Bell,
   X,
   RefreshCcw,
-  Info
+  Info,
+  Bookmark,
+  FolderOpen,
+  Copy,
+  Save
 } from 'lucide-react';
-import { RoleType, ResumeInput, ScreenerOutput, User, HistoryItem } from './types';
+import { RoleType, ResumeInput, ScreenerOutput, User, HistoryItem, Template } from './types';
 import { screenResumes } from './geminiService';
 import Dashboard from './components/Dashboard';
 import Auth from './components/Auth';
@@ -37,6 +41,11 @@ const App: React.FC = () => {
     return savedHistory ? JSON.parse(savedHistory) : [];
   });
 
+  const [templates, setTemplates] = useState<Template[]>(() => {
+    const savedTemplates = localStorage.getItem('resu_templates');
+    return savedTemplates ? JSON.parse(savedTemplates) : [];
+  });
+
   const [view, setView] = useState<'screen' | 'result' | 'history'>('screen');
   const [roleType, setRoleType] = useState<RoleType>(RoleType.Tech);
   const [jobDescription, setJobDescription] = useState('');
@@ -45,10 +54,16 @@ const App: React.FC = () => {
   const [processingStep, setProcessingStep] = useState('');
   const [result, setResult] = useState<ScreenerOutput | null>(null);
   const [error, setError] = useState<{ message: string; details?: string } | null>(null);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
 
   useEffect(() => {
     localStorage.setItem('resu_history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem('resu_templates', JSON.stringify(templates));
+  }, [templates]);
 
   useEffect(() => {
     if (user) {
@@ -74,8 +89,37 @@ const App: React.FC = () => {
     if (error) setError(null);
   };
 
+  const handleSaveTemplate = () => {
+    if (!jobDescription.trim()) {
+      setError({ message: 'Cannot save template', details: 'A job description is required to create a template.' });
+      return;
+    }
+    if (!templateName.trim()) return;
+
+    const newTemplate: Template = {
+      id: Date.now().toString(),
+      name: templateName,
+      roleType: roleType,
+      jobDescription: jobDescription,
+      createdAt: Date.now()
+    };
+
+    setTemplates([newTemplate, ...templates]);
+    setTemplateName('');
+    setShowSaveTemplate(false);
+  };
+
+  const handleLoadTemplate = (template: Template) => {
+    setRoleType(template.roleType);
+    setJobDescription(template.jobDescription);
+    setError(null);
+  };
+
+  const handleDeleteTemplate = (id: string) => {
+    setTemplates(templates.filter(t => t.id !== id));
+  };
+
   const handleProcess = async () => {
-    // Basic Input Validation
     if (!jobDescription.trim()) {
       setError({ message: 'Missing Job Description', details: 'The analysis engine requires a job description to cross-reference against resumes.' });
       return;
@@ -92,7 +136,6 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      // Small simulated delay for UX feel
       await new Promise(r => setTimeout(r, 800));
       setProcessingStep('Cross-referencing candidates...');
       
@@ -226,6 +269,47 @@ const App: React.FC = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* Save Template Dialog */}
+        {showSaveTemplate && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                    <Bookmark className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800">Save Configuration</h3>
+                </div>
+                <button onClick={() => setShowSaveTemplate(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <p className="text-sm text-slate-500">Save this job description and role type for future use.</p>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Template Name</label>
+                  <input 
+                    autoFocus
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="e.g. Senior Frontend Engineer JD"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none text-sm font-medium"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveTemplate()}
+                  />
+                </div>
+                <button 
+                  onClick={handleSaveTemplate}
+                  disabled={!templateName.trim()}
+                  className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 disabled:opacity-50"
+                >
+                  Save Template
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Persistent Error Alert */}
         {error && (
           <div className="mb-8 p-5 bg-red-50 border border-red-200 rounded-2xl shadow-sm flex items-start justify-between animate-in slide-in-from-top-4">
@@ -276,17 +360,26 @@ const App: React.FC = () => {
           />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Left Column: Job & Config */}
+            {/* Left Column: Job & Config & Templates */}
             <div className="lg:col-span-5 space-y-6">
               <section className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
-                <div className="flex items-center space-x-3 mb-6">
-                  <div className="p-2 bg-blue-50 rounded-xl">
-                    <Briefcase className="w-6 h-6 text-blue-600" />
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-xl">
+                      <Briefcase className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-800">Job Specification</h2>
+                      <p className="text-slate-400 text-xs">Define the criteria for AI analysis</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-800">Job Specification</h2>
-                    <p className="text-slate-400 text-xs">Define the criteria for AI analysis</p>
-                  </div>
+                  <button 
+                    onClick={() => setShowSaveTemplate(true)}
+                    className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                    title="Save current config as template"
+                  >
+                    <Save className="w-5 h-5" />
+                  </button>
                 </div>
                 
                 <div className="space-y-6">
@@ -329,6 +422,58 @@ const App: React.FC = () => {
                   </div>
                 </div>
               </section>
+
+              {/* Templates Section */}
+              {templates.length > 0 && (
+                <section className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+                  <div className="flex items-center space-x-3 mb-6">
+                    <div className="p-2 bg-amber-50 rounded-xl">
+                      <FolderOpen className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-800">Saved Templates</h2>
+                      <p className="text-slate-400 text-xs">Load previously used configurations</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                    {templates.map(tpl => (
+                      <div 
+                        key={tpl.id}
+                        className="group flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 transition-all"
+                      >
+                        <div 
+                          className="flex-grow cursor-pointer"
+                          onClick={() => handleLoadTemplate(tpl)}
+                        >
+                          <h4 className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-amber-700 transition-colors">{tpl.name}</h4>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">{tpl.roleType}</span>
+                            <span className="text-[10px] text-slate-300">•</span>
+                            <span className="text-[10px] text-slate-300">{new Date(tpl.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1 ml-2">
+                           <button 
+                            onClick={() => handleLoadTemplate(tpl)}
+                            className="p-2 text-slate-300 hover:text-amber-600 rounded-lg transition-all"
+                            title="Load Template"
+                           >
+                            <Copy className="w-4 h-4" />
+                           </button>
+                           <button 
+                            onClick={() => handleDeleteTemplate(tpl.id)}
+                            className="p-2 text-slate-300 hover:text-red-500 rounded-lg transition-all"
+                            title="Delete Template"
+                           >
+                            <Trash2 className="w-4 h-4" />
+                           </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <section className="bg-slate-900 rounded-3xl shadow-2xl p-8 text-white relative overflow-hidden group">
                 <div className="relative z-10">

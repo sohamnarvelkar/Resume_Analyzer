@@ -65,3 +65,11 @@ export interface HistoryItem {
   candidateCount: number;
   data: ScreenerOutput;
 }
+
+export interface Template {
+  id: string;
+  name: string;
+  roleType: RoleType;
+  jobDescription: string;
+  createdAt: number;
+}
